@@ -1,0 +1,371 @@
+/*
+  Frontend single-file React app (default export) using Tailwind CSS classes.
+  Purpose: modern/light glass UI for a downloader frontend (YouTube, Instagram, SoundCloud).
+  IMPORTANT: This file intentionally DOES NOT implement/downstream scraping or any code that downloads from third-party platforms.
+  Instead it provides a complete, deployable frontend with placeholder API calls and a backend specification below.
+
+  Backend spec (implement on your host):
+  - POST /api/prepare
+    Body: { platform: 'youtube'|'instagram'|'soundcloud', url: string }
+    Response: { id: string, title: string, thumbnails: [url], formats: [{ itag?: string, quality: '1080p'|'720p'|'audio', mime: string, size?: string }] }
+    Notes: This endpoint should validate that the requester has the rights to download; perform all actual downloading/conversion server-side using your licensed tooling or official APIs.
+  - GET /api/download?id=...&format=...
+    Response: binary stream or redirect to a signed URL to download the file.
+  - Authentication: require an API key or user session to protect abuse.
+
+  Deployment notes:
+  - This frontend can be served as static files (Vite / create-react-app build) behind an HTTPS host.
+  - Backend must run on your server (Node/Go/Python) and be configured with your credentials and license tools.
+
+  Use this UI with care and only for content you are licensed to distribute or download.
+*/
+
+import React, { useState } from 'react';
+
+export default function App() {
+  const [platform, setPlatform] = useState('youtube');
+  const [url, setUrl] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [result, setResult] = useState(null);
+  const [error, setError] = useState('');
+
+  async function handleSubmit(e) {
+    e && e.preventDefault();
+    setError('');
+    if (!url.trim()) { setError('لطفاً لینک را وارد کنید.'); return; }
+    setLoading(true);
+    setResult(null);
+    try {
+      const res = await fetch('/api/prepare', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ platform, url: url.trim() }),
+      });
+      if (!res.ok) throw new Error('Preparing failed');
+      const data = await res.json();
+      setResult(data);
+    } catch (err) {
+      console.error(err);
+      setError('خطا در گرفتن اطلاعات. لطفاً بعداً تلاش کنید.');
+    } finally { setLoading(false); }
+  }
+
+  function handleDownload(format) {
+    // Format should be an identifier returned from /api/prepare
+    // This will either stream the file or give a signed URL from the backend.
+    const id = result?.id;
+    if (!id) return;
+    const url = `/api/download?id=${encodeURIComponent(id)}&format=${encodeURIComponent(format)}`;
+    // Use navigation to let browser handle the download (or replace with fetch for auth headers)
+    window.location.href = url;
+  }
+
+  return (
+    <div className="min-h-screen bg-gradient-to-b from-white to-slate-50 flex items-center justify-center p-6">
+      <div className="w-full max-w-4xl">
+        <header className="mb-6">
+          <div className="backdrop-blur-sm bg-white/60 border border-white/40 rounded-2xl p-6 shadow-sm flex items-center gap-4">
+            <div className="w-14 h-14 rounded-xl bg-gradient-to-tr from-indigo-200 to-cyan-200 flex items-center justify-center text-2xl font-bold text-indigo-800">DS</div>
+            <div>
+              <h1 className="text-2xl font-semibold text-slate-800">Downloader UI — شیشه‌ای، روشن و مدرن</h1>
+              <p className="text-sm text-slate-500 mt-1">دانلود از YouTube، Instagram و SoundCloud — رابط فقط فرانت‌اند (نیاز به بک‌اند برای اجرای دانلود)</p>
+            </div>
+          </div>
+        </header>
+
+        <main className="space-y-6">
+          <form onSubmit={handleSubmit} className="backdrop-blur-sm bg-white/60 border border-white/30 rounded-2xl p-6 shadow-md">
+            <div className="flex gap-4 items-center">
+              <div className="flex gap-1 rounded-lg overflow-hidden border border-white/30">
+                <button type="button" onClick={() => setPlatform('youtube')} className={`px-4 py-2 text-sm ${platform==='youtube' ? 'bg-white/80 font-semibold' : 'bg-transparent'}`}>YouTube</button>
+                <button type="button" onClick={() => setPlatform('instagram')} className={`px-4 py-2 text-sm ${platform==='instagram' ? 'bg-white/80 font-semibold' : 'bg-transparent'}`}>Instagram</button>
+                <button type="button" onClick={() => setPlatform('soundcloud')} className={`px-4 py-2 text-sm ${platform==='soundcloud' ? 'bg-white/80 font-semibold' : 'bg-transparent'}`}>SoundCloud</button>
+              </div>
+
+              <input aria-label="link input" value={url} onChange={e=>setUrl(e.target.value)} placeholder="لینک ویدیو یا آهنگ را اینجا قرار دهید" className="flex-1 px-4 py-3 rounded-lg border border-white/20 outline-none shadow-sm" />
+
+              <button className="px-5 py-3 rounded-lg bg-indigo-600 text-white font-medium" disabled={loading}>{loading ? 'در حال آماده‌سازی...' : 'بررسی لینک'}</button>
+            </div>
+            {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
+          </form>
+
+          <section className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div className="col-span-2 backdrop-blur-sm bg-white/60 border border-white/30 rounded-2xl p-6">
+              <h2 className="text-lg font-semibold text-slate-800 mb-3">پیش‌نمایش</h2>
+              {result ? (
+                <div className="space-y-4">
+                  <div className="flex gap-4 items-center">
+                    <img src={result.thumbnails?.[0]} alt="thumb" className="w-28 h-16 rounded-md object-cover border" />
+                    <div>
+                      <div className="font-semibold text-slate-800">{result.title || 'عنوان نامشخص'}</div>
+                      <div className="text-sm text-slate-500">شناسه: {result.id}</div>
+                    </div>
+                  </div>
+
+                  <div>
+                    <div className="text-sm text-slate-600 mb-2">فرمت‌های قابل دانلود</div>
+                    <div className="flex flex-wrap gap-3">
+                      {result.formats.map((f, idx) => (
+                        <div key={idx} className="p-3 rounded-lg border border-white/20 bg-white/30 flex items-center gap-3">
+                          <div className="text-sm">{f.quality} {f.mime ? `· ${f.mime}` : ''}</div>
+                          <button onClick={() => handleDownload(f.itag || f.quality)} className="px-3 py-1 rounded-md bg-indigo-600 text-white text-sm">دانلود</button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="text-sm text-slate-500">هنوز لینک بررسی نشده است. پس از "بررسی لینک"، فرمت‌ها اینجا نمایش داده می‌شوند.</div>
+              )}
+            </div>
+
+            <aside className="backdrop-blur-sm bg-white/60 border border-white/30 rounded-2xl p-6">
+              <h3 className="font-semibold text-slate-800 mb-2">نکات و امنیت</h3>
+              <ul className="text-sm text-slate-600 space-y-2">
+                <li>برای جلوگیری از سوء‌استفاده، حتماً بک‌اند را پشت احراز هویت قرار دهید.</li>
+                <li>به‌جای اسکریپت‌های غیررسمی، از ابزارها و سرویس‌هایی استفاده کنید که مجوز لازم را دارند.</li>
+                <li>در صورت نیاز، می‌توانم اسکلت سرور (Node/Express یا Python/Flask) آماده تحویل بدهم که فقط با توکن‌های شما کار کند.</li>
+              </ul>
+            </aside>
+          </section>
+
+          <footer className="text-sm text-slate-500 text-center">نسخه پیش‌نمایش رابط کاربری — آمادهٔ پیاده‌سازی بک‌اند و Deploy</footer>
+        </main>
+      </div>
+    </div>
+  );
+}
+
+/* ================= BACKEND: Node/Express (server.js) =================
+
+This backend is a secure scaffold that integrates with yt-dlp (or your licensed downloader) and ffmpeg
+for format listing and generation. It requires that you have yt-dlp and ffmpeg installed on the host.
+
+Files generated here (included in this document):
+- server.js         -> Express server with /api/prepare and /api/download endpoints
+- package.json      -> minimal deps
+- .env.example      -> env variables
+
+IMPORTANT: Adjust paths and tools to your licensed tooling if you prefer not to use yt-dlp.
+
+*/
+
+// server.js
+const express = require('express');
+const { execFile } = require('child_process');
+const path = require('path');
+const fs = require('fs');
+const crypto = require('crypto');
+const util = require('util');
+const stream = require('stream');
+
+const app = express();
+app.use(express.json());
+
+// Simple API key middleware
+const API_KEY = process.env.API_KEY || 'change_me';
+function auth(req, res, next) {
+  const key = req.headers['x-api-key'] || req.query.api_key;
+  if (!key || key !== API_KEY) return res.status(401).json({ error: 'Unauthorized' });
+  next();
+}
+
+// storage for prepared items (in-memory; for production use a DB or signed URLs)
+const PREP = new Map();
+
+// util
+const execFileAsync = util.promisify(execFile);
+
+app.post('/api/prepare', auth, async (req, res) => {
+  try {
+    const { platform, url } = req.body;
+    if (!url || !platform) return res.status(400).json({ error: 'platform and url required' });
+
+    // Use yt-dlp to list formats as JSON (safe, metadata only)
+    // Command: yt-dlp -j <url>
+    const { stdout } = await execFileAsync('yt-dlp', ['-j', url], { maxBuffer: 10 * 1024 * 1024 });
+    const info = JSON.parse(stdout);
+
+    // Map formats to a safe reduced shape
+    const formats = (info.formats || []).map(f => ({
+      id: f.format_id || f.ext || f.acodec,
+      quality: f.height ? `${f.height}p` : (f.abr ? `${f.abr}kbps` : f.format_note || f.ext),
+      ext: f.ext,
+      filesize: f.filesize ? Math.round(f.filesize / 1024) + ' KB' : undefined,
+      note: f.format_note || '',
+      url: undefined // not exposing direct url
+    }));
+
+    // add simplified audio-only option if available
+    const audioFormats = formats.filter(f=>/(m4a|mp3|webm|aac|ogg)/i.test(f.ext) || /audio/i.test(f.quality));
+
+    const id = crypto.randomBytes(12).toString('hex');
+    const entry = {
+      id,
+      platform,
+      original_url: url,
+      title: info.title || 'unknown',
+      thumbnails: (info.thumbnails||[]).map(t=>t.url).slice(-3).reverse(),
+      formats: formats.slice(-20).concat(audioFormats).slice(0, 12)
+    };
+
+    PREP.set(id, entry);
+
+    res.json(entry);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'prepare_failed', details: err.message });
+  }
+});
+
+// download endpoint streams a specific format by invoking yt-dlp and piping the output
+app.get('/api/download', auth, async (req, res) => {
+  try {
+    const { id, format, as } = req.query; // format = yt-dlp format id or special values like "audio"
+    if (!id) return res.status(400).json({ error: 'id required' });
+    const entry = PREP.get(id);
+    if (!entry) return res.status(404).json({ error: 'not_found' });
+
+    // sanitize inputs
+    const safeFormat = String(format || '').replace(/[^a-zA-Z0-9_\-\.]/g, '');
+
+    // choose yt-dlp args. If as=audio, request a best audio and convert via ffmpeg
+    const args = [];
+    if (safeFormat) args.push('-f', safeFormat);
+    args.push('-o', '-', '--no-playlist', '--quiet', entry.original_url);
+
+    // If user requested audio-only conversion, we'll pipe to ffmpeg
+    const wantAudio = (as === 'audio');
+
+    const spawn = require('child_process').spawn;
+    const ytdlp = spawn('yt-dlp', args);
+
+    ytdlp.on('error', (e) => {
+      console.error('yt-dlp error', e);
+      res.end();
+    });
+
+    if (wantAudio) {
+      // pipe through ffmpeg to convert to mp3 (or other as needed)
+      res.setHeader('Content-Disposition', `attachment; filename="${sanitizeFilename(entry.title)}.mp3"\`);
+      res.setHeader('Content-Type', 'audio/mpeg');
+
+      const ffmpeg = spawn('ffmpeg', ['-i', 'pipe:0', '-f', 'mp3', '-b:a', '192k', 'pipe:1']);
+      ytdlp.stdout.pipe(ffmpeg.stdin);
+      ffmpeg.stdout.pipe(res);
+
+      ffmpeg.on('close', (code) => {
+        if (code !== 0) console.error('ffmpeg exited', code);
+        res.end();
+      });
+    } else {
+      // stream raw output to client
+      const ext = 'bin';
+      res.setHeader('Content-Disposition', `attachment; filename="${sanitizeFilename(entry.title)}.${ext}"`);
+      res.setHeader('Content-Type', 'application/octet-stream');
+      ytdlp.stdout.pipe(res);
+
+      ytdlp.on('close', () => res.end());
+    }
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'download_failed', details: err.message });
+  }
+});
+
+function sanitizeFilename(name){
+  return (name||'download').replace(/[^a-z0-9\-_. ]/ig,'').slice(0,120).trim();
+}
+
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, ()=> console.log('Server listening on', PORT));
+
+
+/* ================= package.json =================
+{
+  "name": "downloader-backend",
+  "version": "1.0.0",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2"
+  }
+}
+
+================= .env.example =================
+# copy to .env and set securely
+API_KEY=change_me
+PORT=3000
+
+================================================
+
+
+/* ================ Deployment & Host Steps (Ubuntu example) ================
+
+1) Install system packages
+
+sudo apt update
+sudo apt install -y git nodejs npm ffmpeg python3 python3-pip
+# install yt-dlp (recommended) via pip for latest
+sudo pip3 install -U yt-dlp
+
+2) Copy project to host
+# on your dev machine
+# place frontend build (see frontend notes below) in ./frontend/build
+# place server files (server.js, package.json, .env) in ./backend
+
+# on host
+git clone <your-repo> /var/www/downloader
+cd /var/www/downloader/backend
+npm install
+cp .env.example .env
+# edit .env and set API_KEY and other vars
+
+3) Run with PM2 (recommended)
+sudo npm i -g pm2
+pm2 start server.js --name downloader-backend --env production
+pm2 save
+
+4) Nginx reverse proxy + HTTPS (Let's Encrypt)
+sudo apt install -y nginx certbot python3-certbot-nginx
+
+# example nginx site config
+# /etc/nginx/sites-available/downloader
+server {
+  listen 80;
+  server_name your.domain.com;
+  location / {
+    proxy_pass http://127.0.0.1:3000;
+    proxy_http_version 1.1;
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection 'upgrade';
+    proxy_set_header Host $host;
+    proxy_cache_bypass $http_upgrade;
+  }
+  location /static/ {
+    root /var/www/downloader/frontend/build;
+  }
+}
+
+sudo ln -s /etc/nginx/sites-available/downloader /etc/nginx/sites-enabled/
+sudo nginx -t
+sudo systemctl reload nginx
+
+# then run certbot
+sudo certbot --nginx -d your.domain.com
+
+5) Frontend build (React)
+# in frontend project directory
+npm install
+npm run build
+# copy build output to /var/www/downloader/frontend/build
+
+6) Security and production notes
+- Use a real database or signed short-lived URLs for downloads in place of in-memory PREP.
+- Rotate API_KEY and require per-user tokens.
+- Rate-limit endpoints, add CAPTCHAs or user accounts to prevent abuse.
+- Log and monitor yt-dlp/ffmpeg usage and disk/network.
+
+============================================================================*/
